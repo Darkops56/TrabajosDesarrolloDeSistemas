@@ -20,15 +20,13 @@ var usuarios = new Dictionary<int, decimal>
     {2, 200.00m}
 };
 
-app.MapGet("/api/usuarios", () => 
+app.MapGet("/api/usuarios/{id}", (int id) => 
 {
     if(usuarios.TryGetValue(id, out var saldo))
         return Results.Ok(new {UsuarioId = id, Saldo = saldo});
     return Results.NotFound(new { Mensaje = "Usuario inexistente." });
 })
 .WithName("Usuarios");
-
-
 
 app.MapPost("/api/usuarios/{id}/debitar", (int id, decimal valor) =>
 {
@@ -47,6 +45,5 @@ app.MapPost("/api/usuarios/{id}/debitar", (int id, decimal valor) =>
     return Results.NotFound(new { Mensaje = "Usuario inexistente." });
 })
 .WithName("Usuarios");
-
 
 app.Run("https://localhost:5001");

@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -6,11 +8,11 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-app.MapPost("api/checkout", async (CompareRequest pedido, HttpClient client) => 
+app.MapPost("api/checkout", async (CompareResquest pedido, HttpClient client) => 
 {
     try
     {
-        var responseCatologo = await client.GetAsync($"https://localhost:5001/api/productos/{pedido.ProductoId}");
+        var responseCatologo = await client.GetAsync($"https://localhost:5002/api/productos/{pedido.ProductoId}");
         if(!responseCatologo.IsSuccessStatusCode)
             return Results.BadRequest(new {Error = "El producto no existe en el catologo"});
         
@@ -22,14 +24,23 @@ app.MapPost("api/checkout", async (CompareRequest pedido, HttpClient client) =>
         
         var usuario = await responseUsuario.Content.ReadFromJsonAsync<UsuarioDTO>();
 
-        if(usuario.Saldo >= producto.Precio)
+        if(usuario?.Saldo >= producto?.Precio)
         {
+            var responseCatologoDescontar = await client.PostAsync($"https://localhost:5002/api/productos/{pedido.ProductoId}/descontar", new StringContent(""));
+            if (!responseCatologoDescontar.IsSuccessStatusCode)
+                return Results.BadRequest(new { Error = "El stock no se descontó."});
+            
+            var responseUsuarioDebitar = await client.PostAsync($"https://localhost:5001/api/usuarios/{pedido.UsuarioId}/debitar?valor={producto.Precio}", new StringContent(JsonSerializer.Serialize(new {valor = producto.Precio})));
+            if (!responseUsuarioDebitar.IsSuccessStatusCode)
+                return Results.BadRequest(new { Error = "El stock se descontó pero no se cobró."});
+
             return Results.Ok(
-                new {
-                    Estado = "Aprobado",
-                    Mensaje = $"Compra exitosa. Se debitaron ${producto.Precio} de la cuenta del usuario {pedido.UsuarioId}"
-                }
-            );
+                        new
+                        {
+                            Estado = "Aprobado",
+                            Mensaje = $"Compra exitosa. Se debitaron ${producto.Precio} de la cuenta del usuario {pedido.UsuarioId}"
+                        }
+                    );
         }
         else 
         {
@@ -55,6 +66,5 @@ app.UseHttpsRedirection();
 app.Run("https://localhost:5003");
 
 public record CompareResquest(int UsuarioId, int ProductoId);
-public record ProductoDTO(int UsuarioId, decimal Saldo);
-public record UsuarioDTO(int ProductoId, decimal Precio);
-
+public record UsuarioDTO(int UsuarioId, decimal Saldo);
+public record ProductoDTO(int ProductoId, decimal Precio);

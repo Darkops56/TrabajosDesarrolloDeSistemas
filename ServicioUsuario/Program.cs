@@ -14,28 +14,39 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
+var usuarios = new Dictionary<int, decimal>
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
+    {1, 1500.00m },
+    {2, 200.00m}
 };
 
-app.MapGet("/weatherforecast", () =>
+app.MapGet("/api/usuarios", () => 
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
+    if(usuarios.TryGetValue(id, out var saldo))
+        return Results.Ok(new {UsuarioId = id, Saldo = saldo});
+    return Results.NotFound(new { Mensaje = "Usuario inexistente." });
 })
-.WithName("GetWeatherForecast");
+.WithName("Usuarios");
 
-app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+
+app.MapPost("/api/usuarios/{id}/debitar", (int id, decimal valor) =>
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+    if(usuarios.TryGetValue(id, out var saldo))
+    {
+        if(saldo >= valor)
+        {
+            usuarios[id] = saldo - valor;
+            return Results.Ok(new {UsuarioId = id, Saldo = usuarios[id], Mensaje = "Se debito correctamente."});
+        }
+        else 
+        {
+            return Results.BadRequest(new {Error = "Saldo insuficiente"});
+        }
+    }
+    return Results.NotFound(new { Mensaje = "Usuario inexistente." });
+})
+.WithName("Usuarios");
+
+
+app.Run("https://localhost:5001");

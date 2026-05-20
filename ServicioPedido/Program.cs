@@ -6,7 +6,45 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+app.MapPost("api/checkout", async (CompareRequest pedido, HttpClient client) => 
+{
+    try
+    {
+        var responseCatologo = await client.GetAsync($"https://localhost:5001/api/productos/{pedido.ProductoId}");
+        if(!responseCatologo.IsSuccessStatusCode)
+            return Results.BadRequest(new {Error = "El producto no existe en el catologo"});
+        
+        var producto = await responseCatologo.Content.ReadFromJsonAsync<ProductoDTO>();
+        
+        var responseUsuario = await client.GetAsync($"https://localhost:5001/api/usuarios/{pedido.UsuarioId}");
+        if(!responseUsuario.IsSuccessStatusCode)
+            return Results.BadRequest(new {Error = "El usuario no existe en la base de datos"});
+        
+        var usuario = await responseUsuario.Content.ReadFromJsonAsync<UsuarioDTO>();
+
+        if(usuario.Saldo >= producto.Precio)
+        {
+            return Results.Ok(
+                new {
+                    Estado = "Aprobado",
+                    Mensaje = $"Compra exitosa. Se debitaron ${producto.Precio} de la cuenta del usuario {pedido.UsuarioId}"
+                }
+            );
+        }
+        else 
+        {
+            return Results.BadRequest(new {Estado = "Rechazado", Motivo = "Saldo insuficiente"});
+        }
+    }
+    catch(HttpRequestException ex)
+    {
+        return Results.Json(new {
+            Estado = "Error 503 (Service Unavailable)",
+            Motivo = "Uno de los microservicios internos no responde. Intente mas tarde",
+            DetalleTecnico = ex.Message
+        }, statusCode: 503);
+    }
+});
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -14,28 +52,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+app.Run("https://localhost:5003");
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+public record CompareResquest(int UsuarioId, int ProductoId);
+public record ProductoDTO(int UsuarioId, decimal Saldo);
+public record UsuarioDTO(int ProductoId, decimal Precio);
 
-app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
